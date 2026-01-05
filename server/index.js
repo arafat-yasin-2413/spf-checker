@@ -19,7 +19,6 @@ app.get("/spf", async (req, res) => {
         });
     }
 
-
     try{
         const records = await resolveTxt(domain);
 
