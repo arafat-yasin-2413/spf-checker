@@ -35,6 +35,8 @@ npm run dev
 ```
 The frontend runs at: http://localhost:5173 (default Vite port).
 
+The backend runs at: http://localhost:5000 (assigned port).
+
 ### Note: This will also install react-loader-spinner used for the loading indicator.
 
 ## Open the app in your browser and enter a domain to check its SPF record.
