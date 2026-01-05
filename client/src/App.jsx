@@ -5,81 +5,157 @@ function App() {
 	const [domain, setDomain] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
-	const [spfRecords, setSpfRecords] = useState([]);
+	const [spfData, setSpfData] = useState([]);
+
+	const [expandedInclude, setExpandedInclude] = useState({});
+	const [expandedRedirect, setExpandedRedirect] = useState({});
+
+	const fetchSpf = async (url) => {
+		const res = await fetch(url);
+		const data = await res.json();
+		if (!res.ok) throw new Error(data.message);
+		return data;
+	};
 
 	const handleSubmit = async (e) => {
 		e.preventDefault();
 		setError("");
-		setSpfRecords([]);
+		setSpfData([]);
+		setExpandedInclude({});
+		setExpandedRedirect({});
 
 		if (!domain.trim()) {
-			setError("Please enter a domain name");
+			setError("Please enter a valid domain");
 			return;
 		}
 
 		try {
 			setLoading(true);
-			const res = await fetch(`http://localhost:5000/spf?domain=${domain}`);
-			const data = await res.json();
-
-			console.log("-------------printing response --------------");
-			console.log(data);
-			console.log("---- response ends here ----");
-			if (!res.ok) {
-				throw new Error(data.message);
-			}
-
-			setSpfRecords(data.spfRecords);
+			const data = await fetchSpf(`http://localhost:5000/spf?domain=${domain}`);
+			setSpfData(data.spfData);
 		} catch (err) {
-			setError(err.message || "Something went wrong");
+			setError(err.message || "Lookup failed");
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	return (
-		<>
-			<div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
-				<div className="w-full max-w-md bg-white rounded-xl shadowlg p-6">
-					<h1 className="text-2xl font-bold text-center mb-6">SPF Checker</h1>
+	const toggleInclude = async (inc) => {
+		if (expandedInclude[inc]) {
+			setExpandedInclude((prev) => {
+				const copy = { ...prev };
+				delete copy[inc];
+				return copy;
+			});
+			return;
+		}
 
-					<form onSubmit={handleSubmit} className="flex gap-2">
-						<input
-							type="text"
-							placeholder="example.com"
-							value={domain}
-							onChange={(e) => setDomain(e.target.value)}
-							className="flex-1 border rounded-md px-3 py-2 focus:outline-none fucus:ring-2 focus:ring-indigo-500"
-						/>
+		const data = await fetchSpf(`http://localhost:5000/spf/resolve?domain=${inc}`);
+		setExpandedInclude((prev) => ({
+			...prev,
+			[inc]: data.spfData,
+		}));
+	};
 
+	const toggleRedirect = async (red) => {
+		if (expandedRedirect[red]) {
+			setExpandedRedirect((prev) => {
+				const copy = { ...prev };
+				delete copy[red];
+				return copy;
+			});
+			return;
+		}
+
+		const data = await fetchSpf(`http://localhost:5000/spf/resolve?domain=${red}`);
+		setExpandedRedirect((prev) => ({
+			...prev,
+			[red]: data.spfData,
+		}));
+	};
+
+	const renderSpfNode = (item, level = 0) => {
+		const marginLeft = `${level * 1.5}rem`;
+
+		return (
+			<div
+				key={item.record + level}
+				style={{ marginLeft }}
+				className="mt-3 border-l-2 border-gray-300 pl-3 max-w-full">
+				<pre className="bg-gray-100 p-2 rounded text-sm wrap-break-words overflow-x-auto">
+					{item.record}
+				</pre>
+
+				{item.includes.length === 0 && !item.redirect && (
+					<p className="text-xs text-gray-500 mt-1">No includes or redirects</p>
+				)}
+
+				{/* INCLUDE */}
+				{item.includes.map((inc) => (
+					<div key={inc} className="mt-2">
 						<button
-							type="submit"
-							className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
-							Check
+							onClick={() => toggleInclude(inc)}
+							className="flex items-center gap-1 text-sm px-3 py-1 rounded-full
+						 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 transition cursor-pointer w-full sm:w-auto">
+							<span>{expandedInclude[inc] ? "▾" : "▸"}</span>
+							<span>{inc}</span>
 						</button>
-					</form>
 
-					{loading && (
-						<Loader></Loader>
-					)}
+						{expandedInclude[inc] &&
+							expandedInclude[inc].map((r) => renderSpfNode(r, level + 1))}
+					</div>
+				))}
 
-					{error && <p className="text-sm text-red-600 mt-4 font-semibold">{error}</p>}
+				{/* REDIRECT */}
+				{item.redirect && (
+					<div className="mt-2">
+						<button
+							onClick={() => toggleRedirect(item.redirect)}
+							className="flex items-center gap-1 text-sm px-3 py-1 rounded-full
+						 bg-purple-100 text-purple-700 hover:bg-purple-200 transition cursor-pointer w-full sm:w-auto">
+							<span>{expandedRedirect[item.redirect] ? "▾" : "▸"}</span>
+							<span>{item.redirect}</span>
+						</button>
 
-					{spfRecords.length > 0 && (
-						<div className="mt-6">
-							<h3 className="font-semibold mb-2">SPF Records:</h3>
-							{spfRecords.map((record, idx) => (
-								<pre
-									key={idx}
-									className="bg-gray-100 p-3 rounded-md text-sm overflow-x-auto mb-2">
-									{record}
-								</pre>
-							))}
-						</div>
-					)}
-				</div>
+						{expandedRedirect[item.redirect] &&
+							expandedRedirect[item.redirect].map((r) => renderSpfNode(r, level + 1))}
+					</div>
+				)}
 			</div>
-		</>
+		);
+	};
+
+	return (
+		<div className="min-h-screen bg-gray-100 flex items-center justify-center px-4 py-10">
+			<div className="w-full max-w-3xl bg-white rounded-xl shadow-lg p-5 sm:p-8 overflow-x-auto">
+				<h1 className="text-2xl font-bold text-center mb-6">SPF Checker</h1>
+
+				<form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
+					<input
+						value={domain}
+						onChange={(e) => setDomain(e.target.value)}
+						placeholder="example.com"
+						className="flex-1 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-black w-full"
+					/>
+					<button className="bg-indigo-600 text-white px-5 py-2 rounded-md hover:bg-indigo-700 transition cursor-pointer w-full sm:w-auto mt-2 sm:mt-0">
+						Check
+					</button>
+				</form>
+
+				{loading && <Loader />}
+				{error && <p className="text-sm text-red-600 mt-4">{error}</p>}
+
+				{/* SPF RESULTS */}
+				{spfData.map((item, idx) => (
+					<div
+						key={idx}
+						className="mt-6 border rounded-lg p-4 bg-gray-50 overflow-x-auto">
+						<p className="text-sm font-semibold mb-2">Main SPF Record</p>
+						{renderSpfNode(item)}
+					</div>
+				))}
+			</div>
+		</div>
 	);
 }
 

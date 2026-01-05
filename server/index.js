@@ -48,7 +48,7 @@ app.get("/spf", async (req, res) => {
 	try {
 		const spfData = await getSpf(domain);
 
-		if (spfRecords.length === 0) {
+		if (spfData.length === 0) {
 			return res.status(404).json({
 				success: false,
 				message: "No SPF record has been found",
